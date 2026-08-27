@@ -89,6 +89,19 @@ nav { display: flex; gap: 30px; height: 100%; }nav button { border: 0; backgroun
 .score-copy strong, .score-copy .score-label, .score-copy .score-status { display: block; width: auto; }
 .score-copy .score-label { margin-top: 8px; }
 .score-status { position: static; margin-top: 5px; }
+.chart { height: 122px; }
+.chart svg { height: 72px; }
+.day-shade { fill: #3b7f9b; pointer-events: none; }
+.chart-dates { display: flex; justify-content: space-between; margin-top: 4px; color: #73807b; font-size: 8px; }
+.chart-tooltip { transform: translateX(-100%); margin-left: -12px; top: 3px; }
+.chart { position: relative; }
+.chart polyline { stroke-dasharray: 6 4; stroke-linecap: round; }
+.chart-hit-area { fill: transparent; pointer-events: all; }
+.chart-guide { stroke: #183b3b; stroke-width: 1; stroke-dasharray: 3 3; opacity: .45; vector-effect: non-scaling-stroke; }
+.chart-tooltip { position: absolute; top: 2px; z-index: 5; min-width: 142px; padding: 8px 10px; background: #fbfaf6; border: 1px solid #d5ddd5; box-shadow: 0 5px 14px rgba(24,59,59,.14); transform: translateX(-50%); pointer-events: none; font-size: 9px; }
+.chart-tooltip b { display: block; color: #173b3b; margin-bottom: 5px; font-size: 10px; }
+.chart-tooltip span { display: block; line-height: 1.55; white-space: nowrap; }
+.chart-tooltip i { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: currentColor; }
 
 #next-steps {
   display: flex;

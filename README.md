@@ -19,6 +19,14 @@ npm install
 npm run dev
 ```
 
+## Importar una extracción de base de datos
+
+La aplicación acepta una extracción TSV con las columnas `lect_nr_estacion`, `lect_nr_magnitud`, `lect_nr_lectura`, `lect_cd_verificada` y `lect_dt_timestamp`. Convierte las filas individuales a snapshots diarios y genera la serie de los tres últimos días:
+
+```sh
+npm run convert:tsv -- ./datos/lecturas.tsv
+```
+
 ## Publicación
 
 Configura GitHub Pages con GitHub Actions y usa el workflow de despliegue generado por Vite. El workflow de datos necesita permisos `Contents: Read and write` en `Settings > Actions > General`.

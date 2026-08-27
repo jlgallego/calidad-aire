@@ -14,6 +14,9 @@ export type AirStation = {
   color: string
   values: [string, string, string][]
   series: number[]
+  chartSeries: { label: string; unit: string; values: (number | null)[]; color: string }[]
+  chartDates?: string[]
+  exceedances: string[]
 }
 
 export type AirQualitySnapshot = {
@@ -25,9 +28,10 @@ export type AirQualitySnapshot = {
 }
 
 type MadridRecord = Record<string, string>
-type MadridResponse = { records?: MadridRecord[]; responseDate?: string }
+type MadridResponse = { records?: MadridRecord[]; responseDate?: string; chart?: { dates: string[]; stations: Record<string, { label: string; unit: string; values: (number | null)[] }[]> } }
 
 const expectedMagnitudes = new Set(['1', '7', '8', '9', '10', '14'])
+const chartColors = ['#d66c3e', '#3b7f9b', '#c39420', '#6b6fa8', '#3b9c78', '#9b5c38', '#718078', '#bf6d91']
 
 const pollutantNames: Record<string, [string, string]> = {
   '1': ['SO₂', 'µg/m³'], '6': ['CO', 'mg/m³'], '7': ['NO₂', 'µg/m³'],
@@ -61,6 +65,35 @@ function madridIndex(magnitude: string, concentration: number): number | undefin
   return band * 25 + ((concentration - lowerConcentration) / (limits[band] - lowerConcentration)) * 25
 }
 
+function exceedances(records: MadridRecord[]): string[] {
+  const labels: Record<string, string> = { '1': 'SO₂', '7': 'NO₂', '8': 'PM₂.₅', '9': 'PM₁₀', '10': 'PM₁₀', '14': 'O₃' }
+  const hourlyLimits: Record<string, number> = { '1': 350, '7': 200, '9': 50, '10': 50 }
+  const messages: string[] = []
+  for (const record of records) {
+    const label = labels[record.MAGNITUD]
+    if (!label) continue
+    for (let index = 0; index < 24; index += 1) {
+      const hour = String(index + 1).padStart(2, '0')
+      const value = Number(record[`H${hour}`])
+      if (record[`V${hour}`] === 'V' && Number.isFinite(value) && value > (hourlyLimits[record.MAGNITUD] ?? Number.POSITIVE_INFINITY)) messages.push(`${label} supera el umbral horario a las ${hour}:00 (${value} µg/m³)`)
+    }
+    if (record.MAGNITUD === '14') {
+      const valid = Array.from({ length: 24 }, (_, index) => Number(record[`H${String(index + 1).padStart(2, '0')}`])).map((value, index) => record[`V${String(index + 1).padStart(2, '0')}`] === 'V' && value > 0 ? value : null)
+      for (let index = 7; index < valid.length; index += 1) {
+        const window = valid.slice(index - 7, index + 1)
+        if (window.every((value) => value !== null) && window.reduce((sum, value) => sum + value, 0) / 8 > 120) messages.push(`O₃ supera el umbral octohorario a las ${String(index + 1).padStart(2, '0')}:00`)
+      }
+    }
+  }
+  return [...new Set(messages)]
+}
+
+function recordDate(payload: MadridResponse, records: MadridRecord[]): string {
+  if (payload.responseDate) return payload.responseDate.slice(0, 10)
+  const record = records[0]
+  return `${record?.ANO ?? '0000'}-${record?.MES ?? '00'}-${record?.DIA ?? '00'}`
+}
+
 const stationLayout: Record<string, [string, string, number, number, string, number, number]> = {
   '4': ['Plaza de España', 'Centro', 18, 36, 'Plaza de España', 40.4238823, -3.7122567], '8': ['Escuelas Aguirre', 'Retiro', 56, 42, 'Entre C/ Alcalá y C/ O’ Donell', 40.4215533, -3.6823158],
   '11': ['Ramón y Cajal', 'Chamartín', 68, 25, 'Avda. Ramón y Cajal esq. C/ Príncipe de Vergara', 40.4514734, -3.6773491], '16': ['Arturo Soria', 'Ciudad Lineal', 82, 32, 'C/ Arturo Soria esq. C/ Vizconde de los Asilos', 40.4400457, -3.6392422],
@@ -89,19 +122,22 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
 
   const stations = [...grouped.entries()].map(([id, records], stationIndex) => {
     const [fallbackName, area, fallbackX, fallbackY, address, latitude, longitude] = stationLayout[id] ?? [`Estación ${id}`, 'Madrid', 15 + (stationIndex * 17) % 75, 18 + (stationIndex * 23) % 65, 'Madrid', 40.4168, -3.7038]
-    const values = records.map((record) => {
+    const values = records.map((record, recordIndex) => {
       const [label, unit] = pollutantNames[record.MAGNITUD] ?? [`Magnitud ${record.MAGNITUD}`, 'µg/m³']
       const readings = Array.from({ length: 24 }, (_, index) => {
         const hour = String(index + 1).padStart(2, '0')
-        return record[`V${hour}`] === 'V' ? Number(record[`H${hour}`]) : Number.NaN
-      }).filter(Number.isFinite)
-      const latest = readings.at(-1) ?? 0
-      return { label, value: latest.toFixed(label === 'CO' ? 1 : 0), unit, readings, level: madridIndex(record.MAGNITUD, latest) }
+        const value = Number(record[`H${hour}`])
+        return record[`V${hour}`] === 'V' && Number.isFinite(value) && value !== 0 ? value : null
+      })
+      const latest = readings.findLast((value) => value !== null) ?? 0
+      return { label, value: latest.toFixed(label === 'CO' ? 1 : 0), unit, readings, level: madridIndex(record.MAGNITUD, latest), color: chartColors[recordIndex % chartColors.length] }
     }).filter((item, index, items) => items.findIndex((candidate) => candidate.label === item.label) === index)
     const indexValue = Math.round(Math.max(...values.map((item) => item.level ?? 0), 0))
     const status = indexValue <= 25 ? 'Muy bueno' : indexValue <= 50 ? 'Bueno' : indexValue <= 75 ? 'Regular' : indexValue <= 100 ? 'Malo' : 'Muy malo'
+    const savedSeries = payload.chart?.stations[id]
+    const chartSeries = savedSeries ? savedSeries.map((item, itemIndex) => ({ label: item.label, unit: item.unit, values: item.values, color: values[itemIndex]?.color ?? chartColors[itemIndex % chartColors.length] })) : values.map((item) => ({ label: item.label, unit: item.unit, values: item.readings, color: item.color }))
     const chart = values.find((item) => item.label === 'NO₂') ?? values[0] ?? { readings: [] }
-    return { id, name: fallbackName, area, x: fallbackX, y: fallbackY, address, latitude, longitude, index: indexValue, status, color: caqiColor(indexValue), values: values.filter((item) => item.level !== undefined).slice(0, 4).map((item) => [item.label, item.value, item.unit] as [string, string, string]), series: chart.readings }
+    return { id, name: fallbackName, area, x: fallbackX, y: fallbackY, address, latitude, longitude, index: indexValue, status, color: caqiColor(indexValue), values: values.filter((item) => item.level !== undefined).slice(0, 4).map((item) => [item.label, item.value, item.unit] as [string, string, string]), series: chart.readings.filter((value): value is number => value !== null), chartSeries, chartDates: payload.chart?.dates ?? [recordDate(payload, records)] , exceedances: exceedances(records) }
   })
   const missingStations = Object.keys(stationLayout).filter((id) => !grouped.has(id)).map((id) => `${id} · ${stationLayout[id][0]}`)
   const missingMagnitudes = [...grouped.entries()].flatMap(([id, records]) => [...expectedMagnitudes].filter((magnitude) => !records.some((record) => record.MAGNITUD === magnitude)).map((magnitude) => `Estación ${id}: ${pollutantNames[magnitude]?.[0] ?? magnitude}`))
