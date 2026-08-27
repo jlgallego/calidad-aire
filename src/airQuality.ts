@@ -16,8 +16,18 @@ export type AirStation = {
   series: number[]
 }
 
+export type AirQualitySnapshot = {
+  stations: AirStation[]
+  responseDate?: string
+  expectedStations: number
+  missingStations: string[]
+  missingMagnitudes: string[]
+}
+
 type MadridRecord = Record<string, string>
 type MadridResponse = { records?: MadridRecord[]; responseDate?: string }
+
+const expectedMagnitudes = new Set(['1', '7', '8', '9', '10', '14'])
 
 const pollutantNames: Record<string, [string, string]> = {
   '1': ['SO₂', 'µg/m³'], '6': ['CO', 'mg/m³'], '7': ['NO₂', 'µg/m³'],
@@ -66,7 +76,7 @@ const stationLayout: Record<string, [string, string, number, number, string, num
   '59': ['Juan Carlos I', 'Barajas', 85, 19, 'Parque Juan Carlos I', 40.465144, -3.609031], '60': ['Tres Olivos', 'Fuencarral-El Pardo', 59, 1, 'Plaza Tres Olivos', 40.5005477, -3.6897308],
 }
 
-export async function fetchAirStations(url = AIR_QUALITY_URL): Promise<AirStation[]> {
+export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySnapshot> {
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Madrid API respondió ${response.status}`)
   const payload = await response.json() as MadridResponse
@@ -77,7 +87,7 @@ export async function fetchAirStations(url = AIR_QUALITY_URL): Promise<AirStatio
     grouped.set(record.ESTACION, list)
   }
 
-  return [...grouped.entries()].map(([id, records], stationIndex) => {
+  const stations = [...grouped.entries()].map(([id, records], stationIndex) => {
     const [fallbackName, area, fallbackX, fallbackY, address, latitude, longitude] = stationLayout[id] ?? [`Estación ${id}`, 'Madrid', 15 + (stationIndex * 17) % 75, 18 + (stationIndex * 23) % 65, 'Madrid', 40.4168, -3.7038]
     const values = records.map((record) => {
       const [label, unit] = pollutantNames[record.MAGNITUD] ?? [`Magnitud ${record.MAGNITUD}`, 'µg/m³']
@@ -93,4 +103,11 @@ export async function fetchAirStations(url = AIR_QUALITY_URL): Promise<AirStatio
     const chart = values.find((item) => item.label === 'NO₂') ?? values[0] ?? { readings: [] }
     return { id, name: fallbackName, area, x: fallbackX, y: fallbackY, address, latitude, longitude, index: indexValue, status, color: caqiColor(indexValue), values: values.filter((item) => item.level !== undefined).slice(0, 4).map((item) => [item.label, item.value, item.unit] as [string, string, string]), series: chart.readings }
   })
+  const missingStations = Object.keys(stationLayout).filter((id) => !grouped.has(id)).map((id) => `${id} · ${stationLayout[id][0]}`)
+  const missingMagnitudes = [...grouped.entries()].flatMap(([id, records]) => [...expectedMagnitudes].filter((magnitude) => !records.some((record) => record.MAGNITUD === magnitude)).map((magnitude) => `Estación ${id}: ${pollutantNames[magnitude]?.[0] ?? magnitude}`))
+  return { stations, responseDate: payload.responseDate, expectedStations: Object.keys(stationLayout).length, missingStations, missingMagnitudes }
+}
+
+export async function fetchAirStations(url = AIR_QUALITY_URL): Promise<AirStation[]> {
+  return (await fetchAirData(url)).stations
 }
