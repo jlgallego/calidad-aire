@@ -1,0 +1,29 @@
+name: Actualizar calidad del aire
+
+on:
+  schedule:
+    - cron: '5,25,45 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Usar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Recuperar lecturas de Madrid
+        run: node scripts/fetch-air-quality.mjs
+      - name: Publicar snapshot histórico
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/data
+          git diff --cached --quiet || git commit -m "data: actualizar calidad del aire"
+          git push
