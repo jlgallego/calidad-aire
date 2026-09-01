@@ -1,4 +1,4 @@
-import { MAGNITUDES, magnitudeSymbol, magnitudeUnit, magnitudeIdFromLabel, STATIONS, stationName } from './config/catalog.mjs'
+import { MAGNITUDES, magnitudeColor, magnitudeSymbol, magnitudeUnit, magnitudeIdFromLabel, STATIONS, stationName } from './config/catalog.mjs'
 
 export const AIR_QUALITY_URL = 'https://ciudadesabiertas.madrid.es/dynamicAPI/API/query/calair_tiemporeal.json?pageSize=5000'
 
@@ -14,9 +14,9 @@ export type AirStation = {
   index: number
   status: string
   color: string
-  values: [string, string, string][]
+  values: [string, string, string, string?][]
   series: number[]
-  chartSeries: { label: string; unit: string; values: (number | null)[]; color: string }[]
+  chartSeries: { magnitudeId?: string; label: string; unit: string; values: (number | null)[]; color: string }[]
   chartDates?: string[]
   exceedances: string[]
 }
@@ -112,19 +112,28 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
     const longitude = info?.longitude ?? -3.7038
     
     const values = records.map((record, recordIndex) => {
-      const label = magnitudeSymbol(record.MAGNITUD)
-      const unit = magnitudeUnit(record.MAGNITUD)
+      const magnitudeId = record.MAGNITUD
+      const label = magnitudeSymbol(magnitudeId)
+      const unit = magnitudeUnit(magnitudeId)
       const readings = Array.from({ length: 24 }, (_, index) => {
         const hour = String(index + 1).padStart(2, '0')
         const value = Number(record[`H${hour}`])
         return record[`V${hour}`] === 'V' && Number.isFinite(value) && value !== 0 ? value : null
       })
       const latest = readings.findLast((value) => value !== null) ?? 0
-      return { magnitudeId: record.MAGNITUD, label, value: latest.toFixed(label === 'CO' ? 1 : 0), unit, readings, level: madridIndex(record.MAGNITUD, latest), color: chartColors[recordIndex % chartColors.length] }
+      return {
+        magnitudeId,
+        label,
+        value: latest.toFixed(label === 'CO' ? 1 : 0),
+        unit,
+        readings,
+        level: madridIndex(magnitudeId, latest),
+        color: magnitudeColor(magnitudeId) ?? chartColors[recordIndex % chartColors.length],
+      }
     })
       .filter((item, index, items) => items.findIndex((candidate) => candidate.label === item.label) === index)
       .sort((left, right) => Number(left.magnitudeId) - Number(right.magnitudeId))
-     
+      
     const indexValue = Math.round(Math.max(...values.map((item) => item.level ?? 0), 0))
     const status = indexValue <= 25 ? 'Muy bueno' : indexValue <= 50 ? 'Bueno' : indexValue <= 75 ? 'Regular' : indexValue <= 100 ? 'Malo' : 'Muy malo'
     const savedSeries = payload.chart?.stations[id]
@@ -138,23 +147,25 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
             const label = magnitudeSymbol(normalizedMagnitude) || item.label || normalizedMagnitude
             const unit = magnitudeUnit(normalizedMagnitude) || item.unit || 'µg/m³'
             const liveMatch = chartSeriesByMagnitude.get(normalizedMagnitude)
+            const color = liveMatch?.color ?? magnitudeColor(normalizedMagnitude) ?? chartColors[itemIndex % chartColors.length]
             return {
               magnitudeId: normalizedMagnitude,
               label,
               unit,
               values: Array.isArray(item.values) ? item.values : [],
-              color: liveMatch?.color ?? chartColors[itemIndex % chartColors.length],
+              color,
             }
           })
           .filter((item) => item.label && item.values.length > 0)
           .sort((left, right) => Number(left.magnitudeId || 0) - Number(right.magnitudeId || 0))
-          .map(({ label, unit, values, color }) => ({ label, unit, values, color }))
+          .map(({ magnitudeId, label, unit, values, color }) => ({ magnitudeId, label, unit, values, color }))
       : values.map((item) => ({
+          magnitudeId: item.magnitudeId,
           label: item.label,
           unit: item.unit,
           values: item.readings,
           color: item.color,
-        }));
+        }))
     
     const chart = values.find((item) => item.label === 'NO₂') ?? values[0] ?? { readings: [] }
     return { 
@@ -169,7 +180,7 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
       index: indexValue, 
       status, 
       color: caqiColor(indexValue), 
-      values: values.filter((item) => item.level !== undefined).slice(0, 4).map((item) => [item.label, item.value, item.unit] as [string, string, string]), 
+      values: values.filter((item) => item.level !== undefined).slice(0, 4).map((item) => [item.label, item.value, item.unit, item.magnitudeId] as [string, string, string, string]), 
       series: chart.readings.filter((value): value is number => value !== null), 
       chartSeries, 
       chartDates: payload.chart?.dates ?? [recordDate(payload, records)], 

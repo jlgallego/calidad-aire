@@ -14,18 +14,19 @@
  * @property {string} symbol - símbolo corto para UI, p.ej. 'NO₂'
  * @property {string} name   - nombre largo, p.ej. 'Dióxido de nitrógeno'
  * @property {string} unit   - unidad de medida, p.ej. 'µg/m³'
+ * @property {string} color  - color fijo para gráficos y etiquetas
  */
 
 /** @type {Record<string, MagnitudeInfo>} */
 export const MAGNITUDES = {
-  '1':  { symbol: 'SO₂',   name: 'Dióxido de azufre',      unit: 'µg/m³' },
-  '6':  { symbol: 'CO',    name: 'Monóxido de carbono',    unit: 'mg/m³' },
-  '7':  { symbol: 'NO',    name: 'Óxido de nitrógeno',     unit: 'µg/m³' },
-  '8':  { symbol: 'NO₂',   name: 'Dióxido de nitrógeno',   unit: 'µg/m³' },
-  '9':  { symbol: 'PM₂.₅', name: 'Partículas < 2.5 µm',    unit: 'µg/m³' },
-  '10': { symbol: 'PM₁₀',  name: 'Partículas < 10 µm',     unit: 'µg/m³' },
-  '12': { symbol: 'NOx',   name: 'Óxidos de nitrógeno',    unit: 'µg/m³' },
-  '14': { symbol: 'O₃',    name: 'Ozono',                  unit: 'µg/m³' },
+  '1':  { symbol: 'SO₂',   name: 'Dióxido de azufre',      unit: 'µg/m³', color: '#4B87C8' },
+  '6':  { symbol: 'CO',    name: 'Monóxido de carbono',    unit: 'mg/m³', color: '#5EA36E' },
+  '7':  { symbol: 'NO',    name: 'Óxido de nitrógeno',     unit: 'µg/m³', color: '#E67E22' },
+  '8':  { symbol: 'NO₂',   name: 'Dióxido de nitrógeno',   unit: 'µg/m³', color: '#D84315' },
+  '9':  { symbol: 'PM₂.₅', name: 'Partículas < 2.5 µm',    unit: 'µg/m³', color: '#8E44AD' },
+  '10': { symbol: 'PM₁₀',  name: 'Partículas < 10 µm',     unit: 'µg/m³', color: '#E67E22' },
+  '12': { symbol: 'NOx',   name: 'Óxidos de nitrógeno',    unit: 'µg/m³', color: '#7D3C98' },
+  '14': { symbol: 'O₃',    name: 'Ozono',                  unit: 'µg/m³', color: '#1E8E82' },
 }
 
 /** ID de magnitud -> símbolo. Si no se reconoce, devuelve el propio id (nunca inventa). */
@@ -36,6 +37,11 @@ export function magnitudeSymbol(id) {
 /** ID de magnitud -> unidad. Fallback razonable si algún día aparece una magnitud nueva sin catalogar. */
 export function magnitudeUnit(id) {
   return MAGNITUDES[id]?.unit ?? 'µg/m³'
+}
+
+/** ID de magnitud -> color fijo para gráficos y etiquetas. */
+export function magnitudeColor(id) {
+  return MAGNITUDES[id]?.color ?? '#6B7280'
 }
 
 /**

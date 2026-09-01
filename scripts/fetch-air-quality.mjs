@@ -18,8 +18,11 @@ function mergePendingHours(record, previousRecord) {
   if (!previousRecord) return record
   const merged = { ...record }
   for (const hour of hourKeys) {
-    const currentIsValid = record[`V${hour}`] === 'V' && Number(record[`H${hour}`]) !== 0
-    const previousIsValid = previousRecord[`V${hour}`] === 'V' && Number(previousRecord[`H${hour}`]) !== 0
+    const currentValue = Number(record[`H${hour}`])
+    const currentIsValid = record[`V${hour}`] === 'V' && Number.isFinite(currentValue) && currentValue !== 0
+    if (currentIsValid) continue
+    const previousValue = Number(previousRecord[`H${hour}`])
+    const previousIsValid = previousRecord[`V${hour}`] === 'V' && Number.isFinite(previousValue) && previousValue !== 0
     if (!currentIsValid && previousIsValid) {
       merged[`H${hour}`] = previousRecord[`H${hour}`]
       merged[`V${hour}`] = 'V'
@@ -29,7 +32,7 @@ function mergePendingHours(record, previousRecord) {
 }
 
 async function loadRecentRecords() {
-  const files = (await readdir(historyDirectory)).filter((file) => file.endsWith('.json')).sort().slice(-2)
+  const files = (await readdir(historyDirectory)).filter((file) => file.endsWith('.json')).sort().slice(-3)
   const records = new Map()
   for (const file of files) {
     const payload = JSON.parse(await readFile(new URL(`./${file}`, historyDirectory), 'utf8'))
