@@ -96,7 +96,6 @@ nav { display: flex; gap: 30px; height: 100%; }nav button { border: 0; backgroun
 .chart-tooltip { transform: translateX(-100%); margin-left: -12px; top: 3px; }
 .chart { position: relative; }
 .chart polyline { 
-  //stroke-dasharray: 6 4; 
   stroke-linecap: round; 
 }
 .chart-hit-area { fill: transparent; pointer-events: all; }
