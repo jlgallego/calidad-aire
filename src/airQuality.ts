@@ -32,7 +32,6 @@ export type AirQualitySnapshot = {
 type MadridRecord = Record<string, string>
 type MadridResponse = { records?: MadridRecord[]; responseDate?: string; chart?: { dates: string[]; stations: Record<string, { magnitude?: string; label: string; unit: string; values: (number | null)[] }[]> } }
 
-const expectedMagnitudes = new Set(['1', '6', '7', '8', '9', '10', '12', '14'])
 const chartColors = ['#d66c3e', '#3b7f9b', '#c39420', '#6b6fa8', '#3b9c78', '#9b5c38', '#718078', '#bf6d91']
 
 function latestValueForHour(readings: Array<number | null>, referenceDate?: string): number {
@@ -201,10 +200,18 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
       exceedances: exceedances(records),
     }
   })
-  const missingStations = Object.keys(STATIONS).filter((id) => !grouped.has(id)).map((id) => `${id} · ${stationName(id)}`)
-  const missingMagnitudes = [...grouped.entries()].flatMap(([id, records]) => 
-    [...expectedMagnitudes].filter((magnitude) => !records.some((record) => record.MAGNITUD === magnitude)).map((magnitude) => `Estación ${id}: ${magnitudeSymbol(magnitude)}`)
-  )
+  const missingStations = Object.keys(STATIONS)
+    .filter((id) => !grouped.has(id))
+    .map((id) => `Estación ${id} · ${stationName(id)}`)
+
+  const missingMagnitudes = [...grouped.entries()]
+    .flatMap(([id, records]) => {
+      const expected = STATIONS[id]?.magnitudes ?? []
+      const missing = expected.filter((magnitude) => !records.some((record) => record.MAGNITUD === magnitude))
+      if (!missing.length) return []
+      return [`Estación ${id} · ${stationName(id)}: ${missing.map((magnitude) => magnitudeSymbol(magnitude)).join(', ')}`]
+    })
+
   return { stations, responseDate: payload.responseDate, expectedStations: Object.keys(STATIONS).length, missingStations, missingMagnitudes }
 }
 

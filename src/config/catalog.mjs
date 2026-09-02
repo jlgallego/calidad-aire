@@ -19,18 +19,19 @@
 
 /** @type {Record<string, MagnitudeInfo>} */
 export const MAGNITUDES = {
-  '1':  { symbol: 'SO₂',   name: 'Dióxido de azufre',      unit: 'µg/m³', color: '#4B87C8' },
-  '6':  { symbol: 'CO',    name: 'Monóxido de carbono',    unit: 'mg/m³', color: '#5EA36E' },
-  '7':  { symbol: 'NO',    name: 'Óxido de nitrógeno',     unit: 'µg/m³', color: '#E67E22' },
-  '8':  { symbol: 'NO₂',   name: 'Dióxido de nitrógeno',   unit: 'µg/m³', color: '#D84315' },
-  '9':  { symbol: 'PM₂.₅', name: 'Partículas < 2.5 µm',    unit: 'µg/m³', color: '#8E44AD' },
-  '10': { symbol: 'PM₁₀',  name: 'Partículas < 10 µm',     unit: 'µg/m³', color: '#E67E22' },
-  '12': { symbol: 'NOx',   name: 'Óxidos de nitrógeno',    unit: 'µg/m³', color: '#7D3C98' },
-  '14': { symbol: 'O₃',    name: 'Ozono',                  unit: 'µg/m³', color: '#1E8E82' },
-  '20': { symbol: 'TOL',   name: 'Tolueno',                unit: 'µg/m³', color: '#c00798' },
-  '30': { symbol: 'BEN',   name: 'Benceno',                 unit: 'µg/m³', color: '#c0c007' },
-  '35': { symbol: 'EBE',   name: 'Etilbenceno',             unit: 'µg/m³', color: '#9c7a7a' },
-  
+  '1':  { symbol: 'SO₂',   name: 'Dióxido de azufre',                     unit: 'µg/m³', color: '#4B87C8' },
+  '6':  { symbol: 'CO',    name: 'Monóxido de carbono',                   unit: 'mg/m³', color: '#5EA36E' },
+  '7':  { symbol: 'NO',    name: 'Óxido de nitrógeno',                    unit: 'µg/m³', color: '#E67E22' },
+  '8':  { symbol: 'NO₂',   name: 'Dióxido de nitrógeno',                  unit: 'µg/m³', color: '#D84315' },
+  '9':  { symbol: 'PM₂.₅', name: 'Partículas < 2.5 µm',                   unit: 'µg/m³', color: '#8E44AD' },
+  '10': { symbol: 'PM₁₀',  name: 'Partículas < 10 µm',                    unit: 'µg/m³', color: '#E67E22' },
+  '12': { symbol: 'NOx',   name: 'Óxidos de nitrógeno',                   unit: 'µg/m³', color: '#7D3C98' },
+  '14': { symbol: 'O₃',    name: 'Ozono',                                 unit: 'µg/m³', color: '#1E8E82' },
+  '20': { symbol: 'TOL',   name: 'Tolueno',                               unit: 'µg/m³', color: '#c00798' },
+  '30': { symbol: 'BEN',   name: 'Benceno',                               unit: 'µg/m³', color: '#c0c007' },
+  '35': { symbol: 'EBE',   name: 'Etilbenceno',                           unit: 'µg/m³', color: '#9c7a7a' },
+  '42': { symbol: 'TCH',   name: 'Hidrocarburos totales (Hexano)',        unit: 'µg/m³', color: '#330c0c' },
+  '44': { symbol: 'NMCH',   name: 'Hidrocarburos no metálicos (Hexano)',   unit: 'µg/m³', color: '#0b3117' },
 }
 
 /** ID de magnitud -> símbolo. Si no se reconoce, devuelve el propio id (nunca inventa). */
@@ -72,16 +73,17 @@ export function magnitudeIdFromLabel(label) {
  * @property {number} longitude
  * @property {number} x - posición aproximada en el mapa esquemático de respaldo (0-100)
  * @property {number} y - posición aproximada en el mapa esquemático de respaldo (0-100)
+ * @property {string[]} [magnitudes] - magnitudes esperadas por la estación
  */
 
 /** @type {Record<string, StationInfo>} */
 export const STATIONS = {
-  '4':  { name: 'Plaza de España',   area: 'Centro',                x: 18, y: 36, address: 'Plaza de España', latitude: 40.4238823, longitude: -3.7122567, magnitudes: ['6', '7', '8', '9', '10', '12'] },
+  '4':  { name: 'Plaza de España',   area: 'Centro',                x: 18, y: 36, address: 'Plaza de España', latitude: 40.4238823, longitude: -3.7122567, magnitudes: ['6', '7', '8', '9', '10', '12', '14', '20', '30', '42', '44'] },
   '8':  { name: 'Escuelas Aguirre',  area: 'Retiro',                x: 56, y: 42, address: 'Entre C/ Alcalá y C/ O’ Donell', latitude: 40.4215533, longitude: -3.6823158, magnitudes: ['1', '6', '7', '8', '9', '10', '12', '14', '20', '30', '35'] },
-  '11': { name: 'Ramón y Cajal',     area: 'Chamartín',             x: 68, y: 25, address: 'Avda. Ramón y Cajal esq. C/ Príncipe de Vergara', latitude: 40.4514734, longitude: -3.6773491, magnitudes: ['7', '8', '12'] },
+  '11': { name: 'Ramón y Cajal',     area: 'Chamartín',             x: 68, y: 25, address: 'Avda. Ramón y Cajal esq. C/ Príncipe de Vergara', latitude: 40.4514734, longitude: -3.6773491, magnitudes: ['7', '8', '12', '20', '30', '35'] },
   '16': { name: 'Arturo Soria',      area: 'Ciudad Lineal',         x: 82, y: 32, address: 'C/ Arturo Soria esq. C/ Vizconde de los Asilos', latitude: 40.4400457, longitude: -3.6392422, magnitudes: ['7', '8', '12', '14'] },
   '17': { name: 'Villaverde',        area: 'Villaverde',            x: 24, y: 86, address: 'C/ Juan Peñalver', latitude: 40.347147, longitude: -3.7133167, magnitudes: ['7', '8', '12', '14'] },
-  '18': { name: 'Farolillo',         area: 'Carabanchel',           x: 20, y: 68, address: 'C/ Farolillo - C/ Ervigio', latitude: 40.3947825, longitude: -3.7318356, magnitudes: ['7', '8', '10', '12', '14', '20', '30', '35'] },
+  '18': { name: 'Farolillo',         area: 'Carabanchel',           x: 20, y: 68, address: 'C/ Farolillo - C/ Ervigio', latitude: 40.3947825, longitude: -3.7318356, magnitudes: ['7', '8', '9', '10', '12', '14', '20', '30', '35'] },
   '24': { name: 'Casa de Campo',     area: 'Moncloa',               x: 8,  y: 38, address: 'Casa de Campo (Terminal del Teleférico)', latitude: 40.4193577, longitude: -3.7473445, magnitudes: ['7', '8', '9', '10', '12', '14'] },
   '27': { name: 'Barajas Pueblo',    area: 'Barajas',               x: 94, y: 17, address: 'C/ Júpiter, 21', latitude: 40.4769179, longitude: -3.5800258, magnitudes: ['7', '8', '12', '14'] },
   '35': { name: 'Plaza del Carmen',  area: 'Centro',                x: 35, y: 35, address: 'Plaza del Carmen esq. Tres Cruces', latitude: 40.4192091, longitude: -3.7031662, magnitudes: ['1', '6', '7', '8', '12', '14'] },
@@ -94,7 +96,7 @@ export const STATIONS = {
   '49': { name: 'Parque del Retiro', area: 'Retiro',                x: 56, y: 53, address: 'Paseo Venezuela - Palacio de Velázquez', latitude: 40.4144444, longitude: -3.6824999, magnitudes: ['7', '8', '12', '14'] },
   '50': { name: 'Plaza Castilla',    area: 'Chamartín',             x: 48, y: 15, address: 'Plaza Castilla (Canal)', latitude: 40.4655841, longitude: -3.6887449, magnitudes: ['7', '8', '9', '10', '12'] },
   '54': { name: 'Ensanche de Vallecas', area: 'Villa de Vallecas',  x: 82, y: 80, address: 'Avda. La Gavia / Avda. Las Suertes', latitude: 40.3730118, longitude: -3.6121394, magnitudes: ['7', '8', '9', '10', '12', '14'] },
-  '55': { name: 'Urb. Embajada',     area: 'Barajas',               x: 90, y: 23, address: 'C/ Riaño (Barajas)', latitude: 40.4623628, longitude: -3.5805649, magnitudes: ['8', '14'] }, 
+  '55': { name: 'Urb. Embajada',     area: 'Barajas',               x: 90, y: 23, address: 'C/ Riaño (Barajas)', latitude: 40.4623628, longitude: -3.5805649, magnitudes: ['7', '8', '10', '12', '20', '30', '35'] }, 
   '56': { name: 'Plaza Elíptica',    area: 'Usera',                 x: 15, y: 73, address: 'Plaza Elíptica - Avda. Oporto', latitude: 40.3850336, longitude: -3.7187679, magnitudes: ['6', '7', '8', '9', '10', '12'] },
   '57': { name: 'Sanchinarro',       area: 'Hortaleza',             x: 77, y: 4,  address: 'C/ Princesa de Éboli esq. C/ María Tudor', latitude: 40.4942012, longitude: -3.6605173, magnitudes: ['7', '8', '9', '10', '12'] },
   '58': { name: 'El Pardo',          area: 'Fuencarral-El Pardo',   x: 3,  y: 2,  address: 'Avda. La Guardia', latitude: 40.5180701, longitude: -3.7746101, magnitudes: ['7', '8', '12', '14'] },
