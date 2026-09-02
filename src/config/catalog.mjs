@@ -27,6 +27,10 @@ export const MAGNITUDES = {
   '10': { symbol: 'PM₁₀',  name: 'Partículas < 10 µm',     unit: 'µg/m³', color: '#E67E22' },
   '12': { symbol: 'NOx',   name: 'Óxidos de nitrógeno',    unit: 'µg/m³', color: '#7D3C98' },
   '14': { symbol: 'O₃',    name: 'Ozono',                  unit: 'µg/m³', color: '#1E8E82' },
+  '20': { symbol: 'TOL',   name: 'Tolueno',                unit: 'µg/m³', color: '#c00798' },
+  '30': { symbol: 'BEN',   name: 'Benceno',                 unit: 'µg/m³', color: '#c0c007' },
+  '35': { symbol: 'EBE',   name: 'Etilbenceno',             unit: 'µg/m³', color: '#9c7a7a' },
+  
 }
 
 /** ID de magnitud -> símbolo. Si no se reconoce, devuelve el propio id (nunca inventa). */

@@ -35,6 +35,20 @@ type MadridResponse = { records?: MadridRecord[]; responseDate?: string; chart?:
 const expectedMagnitudes = new Set(['1', '6', '7', '8', '9', '10', '12', '14'])
 const chartColors = ['#d66c3e', '#3b7f9b', '#c39420', '#6b6fa8', '#3b9c78', '#9b5c38', '#718078', '#bf6d91']
 
+function latestValueForHour(readings: Array<number | null>, referenceDate?: string): number {
+  const date = referenceDate ? new Date(referenceDate) : new Date()
+  const currentHour = Number.isNaN(date.getTime()) ? 24 : date.getHours()
+
+  for (let index = readings.length - 1; index >= 0; index -= 1) {
+    const hourNumber = index + 1
+    const value = readings[index]
+    if (value === null || hourNumber > currentHour) continue
+    return value
+  }
+
+  return 0
+}
+
 const indexPollutants: Record<string, number[]> = {
   '1': [50, 100, 350, 500],
   '8': [50, 100, 200, 400],
@@ -120,7 +134,7 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
         const value = Number(record[`H${hour}`])
         return record[`V${hour}`] === 'V' && Number.isFinite(value) && value !== 0 ? value : null
       })
-      const latest = readings.findLast((value) => value !== null) ?? 0
+      const latest = latestValueForHour(readings, payload.responseDate)
       return {
         magnitudeId,
         label,
