@@ -4,7 +4,7 @@
   "totalRecords": 126,
   "pageRecords": 126,
   "status": 200,
-  "responseDate": "2026-09-02T13:23:20",
+  "responseDate": "2026-09-02T13:23:53",
   "first": "https://ciudadesabiertas.madrid.es/dynamicAPI/API/query/calair_tiemporeal.json?pageSize=5000&page=1",
   "last": "https://ciudadesabiertas.madrid.es/dynamicAPI/API/query/calair_tiemporeal.json?pageSize=5000&page=1",
   "self": "https://ciudadesabiertas.madrid.es/dynamicAPI/API/query/calair_tiemporeal.json?pageSize=5000&page=1",
@@ -7321,5 +7321,5 @@
     }
   ],
   "source": "https://ciudadesabiertas.madrid.es/dynamicAPI/API/query/calair_tiemporeal.json?pageSize=5000",
-  "capturedAt": "2026-09-02T13:23:20"
+  "capturedAt": "2026-09-02T13:23:53"
 }
