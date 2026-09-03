@@ -21,16 +21,29 @@ export type AirStation = {
   exceedances: string[]
 }
 
+export type CoverageState = 'valid' | 'partial' | 'missing'
+
+export type CoverageRow = {
+  stationId: string
+  stationName: string
+  values: CoverageState[]
+}
+
 export type AirQualitySnapshot = {
   stations: AirStation[]
   responseDate?: string
   expectedStations: number
   missingStations: string[]
   missingMagnitudes: string[]
+  coverage: {
+    hourly: CoverageRow[]
+    daily: CoverageRow[]
+    dailyDates: string[]
+  }
 }
 
 type MadridRecord = Record<string, string>
-type MadridResponse = { records?: MadridRecord[]; responseDate?: string; chart?: { dates: string[]; stations: Record<string, { magnitude?: string; label: string; unit: string; values: (number | null)[] }[]> } }
+type MadridResponse = { records?: MadridRecord[]; responseDate?: string; history?: Array<{ date: string; responseDate?: string; records?: MadridRecord[] }>; chart?: { dates: string[]; stations: Record<string, { magnitude?: string; label: string; unit: string; values: (number | null)[] }[]> } }
 
 const chartColors = ['#d66c3e', '#3b7f9b', '#c39420', '#6b6fa8', '#3b9c78', '#9b5c38', '#718078', '#bf6d91']
 
@@ -103,10 +116,124 @@ function recordDate(payload: MadridResponse, records: MadridRecord[]): string {
   return `${record?.ANO ?? '0000'}-${record?.MES ?? '00'}-${record?.DIA ?? '00'}`
 }
 
+function coverageStatus(expected: string[], valid: string[]): CoverageState {
+  if (!expected.length) return 'missing'
+  if (!valid.length) return 'missing'
+  if (valid.length === expected.length) return 'valid'
+  return 'partial'
+}
+
+function buildCoverageMatrix(payload: MadridResponse): { hourly: CoverageRow[]; daily: CoverageRow[]; dailyDates: string[] } {
+  const records = payload.records ?? []
+  const currentDate = payload.responseDate ? payload.responseDate.slice(0, 10) : recordDate(payload, records)
+  const historyDates = (payload.history ?? [])
+    .map((entry) => entry.date)
+    .filter((date) => typeof date === 'string' && date.length >= 8)
+    .slice(-30)
+
+  const dailyDates = Array.from(new Set([currentDate, ...historyDates])).sort((left, right) => left.localeCompare(right)).slice(-30)
+  const stationIds = Object.keys(STATIONS)
+
+  const hourly = stationIds.map((stationId) => {
+    const expected = STATIONS[stationId]?.magnitudes ?? []
+    const values = Array.from({ length: 24 }, (_, hourIndex) => {
+      const hour = String(hourIndex + 1).padStart(2, '0')
+      const valid = expected.filter((magnitude) => records.some((record) => {
+        if (record.ESTACION !== stationId || record.MAGNITUD !== magnitude) return false
+        return record[`V${hour}`] === 'V' && Number.isFinite(Number(record[`H${hour}`])) && Number(record[`H${hour}`]) !== 0
+      }))
+      return coverageStatus(expected, valid)
+    })
+    return { stationId, stationName: stationName(stationId), values }
+  })
+
+  const daily = stationIds.map((stationId) => {
+    const expected = STATIONS[stationId]?.magnitudes ?? []
+    const values = dailyDates.map((date) => {
+      const valid = expected.filter((magnitude) => {
+        const dayRecords = (payload.history ?? []).find((entry) => entry.date === date)?.records ?? []
+        const currentDayRecords = date === currentDate ? records : dayRecords
+        return currentDayRecords.some((record) => {
+          if (record.ESTACION !== stationId || record.MAGNITUD !== magnitude) return false
+          return Array.from({ length: 24 }, (_, index) => String(index + 1).padStart(2, '0')).some((hour) => {
+            return record[`V${hour}`] === 'V' && Number.isFinite(Number(record[`H${hour}`])) && Number(record[`H${hour}`]) !== 0
+          })
+        })
+      })
+      return coverageStatus(expected, valid)
+    })
+    return { stationId, stationName: stationName(stationId), values }
+  })
+  return { hourly, daily, dailyDates }
+}
+
+function chartFromHistory(payload: MadridResponse) {
+  const history = payload.history ?? []
+  if (!history.length) return payload.chart
+
+  const dates = history.map((entry) => entry.date).filter((date) => date.length >= 8).sort().slice(-3)
+  const byStation = new Map<string, Map<string, { magnitude: string; values: (number | null)[] }>>()
+  const currentDate = payload.responseDate?.slice(0, 10)
+
+  for (const date of dates) {
+    const entry = history.find((candidate) => candidate.date === date)
+    const maxHour = date === currentDate && payload.responseDate
+      ? Math.min(24, Math.max(0, Number(payload.responseDate.slice(11, 13)) || 0))
+      : 24
+    for (const record of entry?.records ?? []) {
+      const magnitude = String(record.MAGNITUD)
+      const station = byStation.get(record.ESTACION) ?? new Map()
+      const item = station.get(magnitude) ?? { magnitude, values: [] }
+      item.values.push(...buildReadings(record, maxHour))
+      station.set(magnitude, item)
+      byStation.set(record.ESTACION, station)
+    }
+  }
+
+  return {
+    dates,
+    stations: Object.fromEntries([...byStation.entries()].map(([stationId, magnitudes]) => [
+      stationId,
+      [...magnitudes.values()]
+        .sort((left, right) => Number(left.magnitude) - Number(right.magnitude))
+        .map((item) => ({
+          magnitude: item.magnitude,
+          label: magnitudeSymbol(item.magnitude),
+          unit: magnitudeUnit(item.magnitude),
+          values: item.values,
+        })),
+    ])),
+  }
+}
+
+function buildReadings(record: MadridRecord, maxHour: number): (number | null)[] {
+  return Array.from({ length: maxHour }, (_, index) => {
+    const hour = String(index + 1).padStart(2, '0')
+    const value = Number(record[`H${hour}`])
+    return record[`V${hour}`] === 'V' && Number.isFinite(value) && value !== 0 ? value : null
+  })
+}
+
+async function refreshStaticHistory(url: string, payload: MadridResponse): Promise<MadridResponse> {
+  if (!url.endsWith('latest.json') || !payload.history?.length) return payload
+
+  const historyUrl = (date: string) => url.replace(/latest\.json$/, `history/${date}.json`)
+  const results = await Promise.allSettled(payload.history.map(async (entry) => {
+    const response = await fetch(historyUrl(entry.date))
+    if (!response.ok) throw new Error(`No se pudo cargar el histórico de ${entry.date}`)
+    return { date: entry.date, payload: await response.json() as { responseDate?: string; records?: MadridRecord[] } }
+  }))
+  const refreshedHistory = results
+    .filter((result): result is PromiseFulfilledResult<{ date: string; payload: { responseDate?: string; records?: MadridRecord[] } }> => result.status === 'fulfilled')
+    .map((result) => ({ date: result.value.date, ...result.value.payload }))
+
+  return refreshedHistory.length ? { ...payload, history: refreshedHistory } : payload
+}
+
 export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySnapshot> {
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Madrid API respondió ${response.status}`)
-  const payload = await response.json() as MadridResponse
+  const payload = await refreshStaticHistory(url, await response.json() as MadridResponse)
   const grouped = new Map<string, MadridRecord[]>()
   for (const record of payload.records ?? []) {
     const list = grouped.get(record.ESTACION) ?? []
@@ -149,7 +276,8 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
       
     const indexValue = Math.round(Math.max(...values.map((item) => item.level ?? 0), 0))
     const status = indexValue <= 25 ? 'Muy bueno' : indexValue <= 50 ? 'Bueno' : indexValue <= 75 ? 'Regular' : indexValue <= 100 ? 'Malo' : 'Muy malo'
-    const savedSeries = payload.chart?.stations[id]
+    const derivedChart = chartFromHistory(payload)
+    const savedSeries = derivedChart?.stations[id]
     
     const chartSeriesByMagnitude = new Map(values.map((item) => [String(item.magnitudeId), item]))
     const chartSeries = savedSeries
@@ -196,7 +324,7 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
       values: values.filter((item) => item.level !== undefined).slice(0, 4).map((item) => [item.label, item.value, item.unit, item.magnitudeId] as [string, string, string, string]), 
       series: chart.readings.filter((value): value is number => value !== null), 
       chartSeries, 
-      chartDates: payload.chart?.dates ?? [recordDate(payload, records)], 
+      chartDates: derivedChart?.dates ?? [recordDate(payload, records)],
       exceedances: exceedances(records),
     }
   })
@@ -212,7 +340,9 @@ export async function fetchAirData(url = AIR_QUALITY_URL): Promise<AirQualitySna
       return [`Estación ${id} · ${stationName(id)}: ${missing.map((magnitude) => magnitudeSymbol(magnitude)).join(', ')}`]
     })
 
-  return { stations, responseDate: payload.responseDate, expectedStations: Object.keys(STATIONS).length, missingStations, missingMagnitudes }
+  const coverage = buildCoverageMatrix(payload)
+
+  return { stations, responseDate: payload.responseDate, expectedStations: Object.keys(STATIONS).length, missingStations, missingMagnitudes, coverage }
 }
 
 export async function fetchAirStations(url = AIR_QUALITY_URL): Promise<AirStation[]> {

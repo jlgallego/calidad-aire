@@ -21,14 +21,89 @@ const caqiLevels = [
   ['Muy malo', '>100', '#9b3500'],
 ] as const
 
+const coveragePalette = {
+  valid: '#2bb673',
+  partial: '#9ca3a0',
+  missing: '#111111',
+} as const
+
+function formatShortDate(date: string): string {
+  if (!date) return '—'
+  const [year, month, day] = date.split('-')
+  if (!year || !month || !day) return date
+  return `${day}/${month}/${year}`
+}
+
+function CoverageMatrix({ rows, labels, title }: { rows: Array<{ stationId: string; stationName: string; values: Array<'valid' | 'partial' | 'missing'> }>; labels: string[]; title: string }) {
+  const labelWidth = title === 'Horas' ? 120 : 150
+  return <div className="coverage-matrix-wrap"><div className="coverage-matrix" style={{ gridTemplateColumns: `${labelWidth}px repeat(${labels.length}, minmax(5px, 1fr))` }}>
+    <span className="coverage-axis-title">{title}</span>
+    {labels.map((label) => <span key={label} className="coverage-label">{label}</span>)}
+    {rows.map((row) => <div key={row.stationId} className="coverage-row">
+      <span className="coverage-station">{row.stationId} · {row.stationName}</span>
+      {row.values.map((state, index) => <span key={`${row.stationId}-${index}`} className="coverage-cell" title={`${row.stationName} · ${labels[index]}`} style={{ background: coveragePalette[state] }} />)}
+    </div>)}
+  </div></div>
+}
+
 function TrendChart({ series, dates }: { series: Station['chartSeries']; dates: string[] }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const max = Math.max(...series.flatMap((item) => item.values.filter((value): value is number => value !== null)), 1)
+  const values = series.flatMap((item) => item.values.filter((value): value is number => value !== null))
+  const max = Math.max(...values, 1) + 50
   const length = Math.max(...series.map((item) => item.values.length), 1)
-  const pathsFor = (values: (number | null)[]) => values.reduce<string[][]>((segments, value, index) => { if (value === null) return [...segments, []]; const point = `${(index / (length - 1)) * 100},${100 - (value / max) * 88 - 6}`; const current = segments.at(-1) ?? []; return [...segments.slice(0, -1), [...current, point]] }, [[]]).filter((segment) => segment.length > 1).map((segment) => segment.join(' '))
+  const xForIndex = (index: number) => (index / Math.max(length - 1, 1)) * 100
+  const yForValue = (value: number) => 100 - (value / max) * 100
+  const pointsFor = (valuesList: (number | null)[]) => valuesList.reduce<Array<Array<string>>>((segments, value, index) => {
+    if (value === null) return [...segments, []]
+    const point = `${xForIndex(index)},${yForValue(value)}`
+    const current = segments.at(-1) ?? []
+    return [...segments.slice(0, -1), [...current, point]]
+  }, [[]]).filter((segment) => segment.length > 1).map((segment) => segment.join(' '))
   const index = hoverIndex ?? 0
-  const dateFor = (index: number) => dates[Math.floor(index / 24)] ?? dates[dates.length - 1] ?? 'Sin fecha'
-  return <div className="chart" onMouseLeave={() => setHoverIndex(null)}><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Lecturas de todas las magnitudes de los últimos tres días" onMouseMove={(event) => setHoverIndex(Math.max(0, Math.min(length - 1, Math.round((event.nativeEvent.offsetX / event.currentTarget.clientWidth) * (length - 1)))))}>{dates.map((date, dayIndex) => <rect className="day-shade" key={date} x={(dayIndex * 24 / length) * 100} y="0" width={(24 / length) * 100} height="100" style={{ opacity: dayIndex % 2 ? .06 : .015 }} />)}{hoverIndex !== null && <line className="chart-guide" x1={(index / (length - 1)) * 100} x2={(index / (length - 1)) * 100} y1="0" y2="100" />}{series.flatMap((item) => pathsFor(item.values).map((points, pathIndex) => <polyline key={`${item.label}-${pathIndex}`} points={points} style={{ stroke: item.color }} />))}<rect className="chart-hit-area" x="0" y="0" width="100" height="100" /></svg><div className="chart-labels">{Array.from({ length: length }, (_, index) => index).filter((index) => index % 8 === 0).map((hour) => <span key={hour}>{String(hour % 24).padStart(2, '0')}h</span>)}</div><div className="chart-dates">{dates.map((date) => <span key={date}>{date}</span>)}</div>{hoverIndex !== null && <div className="chart-tooltip" style={{ left: `${Math.max(16, (index / (length - 1)) * 100 - 24)}%` }}><b>{dateFor(index)} · {String(index % 24 + 1).padStart(2, '0')}:00</b>{series.map((item) => <span key={item.label} style={{ color: item.color }}><i />{item.label}: {item.values[index] ?? 'sin dato'} {item.values[index] === null ? '' : item.unit}</span>)}</div>}</div>
+  const yTicks = Array.from({ length: 5 }, (_, position) => {
+    const tickValue = Math.round((max * position) / 4)
+    return { value: tickValue, top: yForValue(tickValue) }
+  })
+  const hourTicks = dates.flatMap((date, dayIndex) => [0, 6, 12, 18].map((hour) => {
+    const pointIndex = dayIndex * 24 + hour
+    if (pointIndex >= length) return null
+    return { key: `${date}-${hour}`, hour, x: xForIndex(pointIndex), label: `${String(hour).padStart(2, '0')}h` }
+  }).filter((tick): tick is { key: string; hour: number; x: number; label: string } => tick !== null))
+
+  const dateTimeFor = (pointIndex: number) => {
+    const dayIndex = Math.floor(pointIndex / 24)
+    const hour = pointIndex % 24
+    const day = dates[dayIndex] ?? dates[dates.length - 1] ?? 'Sin fecha'
+    if (!day) return 'Sin fecha'
+    const formatted = formatShortDate(day)
+    return `${formatted} ${String(hour).padStart(2, '0')}:00`
+  }
+
+  const tooltipItems = [...series]
+    .map((item) => ({ ...item, value: item.values[index] }))
+    .filter((item) => item.value !== null && Number.isFinite(item.value))
+    .sort((left, right) => Number(right.value) - Number(left.value))
+
+  return <div className="chart" onMouseLeave={() => setHoverIndex(null)}>
+    <div className="chart-shell">
+      <div className="chart-scale">
+        {yTicks.map((tick) => <span key={tick.value} style={{ top: `${tick.top}%` }}>{tick.value}</span>)}
+      </div>
+      <div className="chart-area-wrap">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Lecturas de todas las magnitudes de los últimos tres días" onMouseMove={(event) => setHoverIndex(Math.max(0, Math.min(length - 1, Math.round((event.nativeEvent.offsetX / event.currentTarget.clientWidth) * (length - 1)))))}>
+          {dates.map((date, dayIndex) => <rect className="day-shade" key={date} x={(dayIndex * 24 / Math.max(length, 1)) * 100} y="0" width={(24 / Math.max(length, 1)) * 100} height="100" style={{ opacity: dayIndex % 2 ? .06 : .015 }} />)}
+          {hoverIndex !== null && <line className="chart-guide" x1={xForIndex(index)} x2={xForIndex(index)} y1="0" y2="100" />}
+          {series.flatMap((item) => pointsFor(item.values).map((points, pathIndex) => <polyline key={`${item.label}-${pathIndex}`} points={points} style={{ stroke: item.color }} />))}
+          <rect className="chart-hit-area" x="0" y="0" width="100" height="100" />
+        </svg>
+        <div className="chart-x-axis">
+          {hourTicks.map((tick) => <span key={tick.key} style={{ left: `${tick.x}%` }}>{tick.label}</span>)}
+        </div>
+      </div>
+    </div>
+    <div className="chart-dates">{dates.map((date) => <span key={date}>{formatShortDate(date)}</span>)}</div>
+    {hoverIndex !== null && <div className="chart-tooltip" style={{ left: `${Math.max(12, Math.min(88, xForIndex(index)))}%` }}><b>{dateTimeFor(index)}</b>{tooltipItems.length ? tooltipItems.map((item) => <span key={`${item.label}-${item.magnitudeId ?? 'unknown'}`} style={{ color: item.color }}><i />{item.label}: {item.value} {item.unit}</span>) : <span><i />Sin dato</span>}</div>}
+  </div>
 }
 
 function App() {
@@ -52,13 +127,25 @@ function App() {
     snapshot.missingMagnitudes.length ? { title: 'Magnitudes pendientes', items: snapshot.missingMagnitudes } : null,
   ].filter(Boolean) as Array<{ title: string; items: string[] }> : []
   const missingSummary = snapshot ? missingGroups.length ? missingGroups.map(({ title, items }) => `${title}: ${items.join('; ')}`).join(' · ') : 'Sin incidencias de cobertura' : 'Esperando el snapshot real del Ayuntamiento.'
+  const hourlyCoverage = snapshot?.coverage.hourly ?? []
+  const dailyCoverage = snapshot?.coverage.daily ?? []
+  const dailyLabels = (snapshot?.coverage.dailyDates ?? []).map((date) => formatShortDate(date).slice(0, 5))
+
   return <main>
     <header className="topbar"><div className="brand"><span className="brand-mark">A</span><span>AIRE <b>MADRID</b></span></div><nav>{['Mapa', 'Indicadores', 'Umbrales'].map((tab) => <button className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)} key={tab}>{tab}</button>)}</nav><div className="live"><span /> ACTUALIZADO HACE 4 MIN</div></header>
     <section className="intro"><div><p className="eyebrow">RED DE VIGILANCIA · MADRID</p><h1>El aire que<br /><em>respiramos.</em></h1></div><p className="intro-copy">Una lectura clara y actualizada de la calidad del aire en la ciudad. Datos abiertos del Ayuntamiento de Madrid.</p></section>
-    <section className="dashboard"><div className="map-panel"><div className="panel-heading"><div><p className="eyebrow">SITUACIÓN ACTUAL</p><h2>Mapa de estaciones</h2></div><span className="date-chip" title={`Última respuesta del portal: ${updatedAt}`}>DATOS CADA 20 MIN · {updatedAt}</span></div><div className="map"><MapView stations={stationData} selectedId={selectedId} onSelect={setSelectedId} /></div><div className="legend"><span><i className="level-very-good" />Muy bueno</span><span><i className="level-good" />Bueno</span><span><i className="level-regular" />Regular</span><span><i className="level-bad" />Malo</span><span><i className="level-very-bad" />Muy malo</span><span className="source" aria-label={missingSummary}><span className="source-indicator">●</span>{stationData.length} / {snapshot?.expectedStations ?? 24} estaciones con datos{missingGroups.length ? <span className="source-tooltip"><strong>Datos pendientes</strong>{missingGroups.map(({ title, items }) => <div key={title} className="source-tooltip-group"><span>{title}</span><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div> )}</span> : null}</span></div></div>
+    <section className="dashboard"><div className="map-panel"><div className="panel-heading"><div><p className="eyebrow">SITUACIÓN ACTUAL</p><h2>Mapa de estaciones</h2></div><span className="date-chip" title={`Última respuesta del portal: ${updatedAt}`}>DATOS CADA 20 MIN · {updatedAt}</span></div><div className="map"><MapView stations={stationData} selectedId={selectedId} onSelect={setSelectedId} /></div><div className="legend">{caqiLevels.map(([label, range, color]) => <div key={label} className="legend-level"><span className="legend-swatch" style={{ background: color }} /><div className="legend-text"><span>{label}</span><small>{range}</small></div></div>)}<span className="source" aria-label={missingSummary}><span className="source-indicator">●</span>{stationData.length} / {snapshot?.expectedStations ?? 24} estaciones con datos{missingGroups.length ? <span className="source-tooltip"><strong>Datos pendientes</strong>{missingGroups.map(({ title, items }) => <div key={title} className="source-tooltip-group"><span>{title}</span><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div> )}</span> : null}</span></div></div>
       <aside className="detail-panel"><div className="detail-head"><div><p className="eyebrow">ESTACIÓN {selected.id}</p><h2>{selected.name}</h2><p className="muted">{selected.area} · Madrid</p></div><span className="status" style={{ '--station-color': selected.color } as React.CSSProperties}><i />{selected.status}</span></div><div className="score"><div className="score-copy"><strong>{selected.index}</strong><span className="score-label">Índice CAQI<br />0 - 125+</span><span className="score-status" style={{ color: selected.color }}>{selected.status}</span></div><div className="score-ring" style={{ '--station-color': selected.color, '--score-progress': `${Math.min(100, selected.index / 1.25)}%` } as React.CSSProperties} /></div><div className="measurements">{selected.values.map(([label, value, unit, magnitudeId]) => { const color = selected.chartSeries.find((item) => item.magnitudeId === magnitudeId)?.color ?? selected.chartSeries.find((item) => item.label === label)?.color ?? '#173b3b'; return <div key={`${label}-${magnitudeId ?? 'unknown'}`}><b style={{ color }}>{label}</b><strong>{value}</strong><span>{unit}</span></div> })}</div><div className="detail-chart"><div className="chart-title"><span>LECTURAS · ÚLTIMOS 3 DÍAS</span><b>TODAS</b></div><TrendChart series={selected.chartSeries} dates={selected.chartDates ?? [snapshot?.responseDate?.slice(0, 10) ?? 'Sin fecha']} /></div><p className="alert"><span>!</span>{selected.exceedances.length ? selected.exceedances.join(' · ') : 'Sin superaciones registradas hoy'}</p></aside>
     </section>
-    <section className="indicators"><div className="section-heading"><div><p className="eyebrow">RESUMEN DE LA RED</p><h2>Indicadores principales</h2></div><button className="outline-button">Ver histórico <span>↗</span></button></div><div className="indicator-grid"><article title="Número de estaciones que han aportado al menos una magnitud válida en la última respuesta del portal."><span className="indicator-icon teal">◌</span><p>ESTACIONES ACTIVAS</p><strong>{stationData.length} <small>/ {snapshot?.expectedStations ?? 24}</small></strong><span className="trend up">Cobertura del snapshot</span></article><article title="Media aritmética del ICA calculado en las estaciones con lecturas válidas."><span className="indicator-icon orange">≈</span><p>ÍNDICE MEDIO</p><strong>{averageIndex} <small>CAQI</small></strong><span className="trend">Media de la red actual</span></article><article title="Estaciones cuyo ICA actual está en los niveles Malo o Muy malo (CAQI superior a 75)."><span className="indicator-icon red">!</span><p>ICA ELEVADO</p><strong>{poorStations} <small>estaciones</small></strong><span className="trend warning">CAQI &gt; 75</span></article><article title="Fecha y hora responseDate devueltas por la API del Ayuntamiento de Madrid."><span className="indicator-icon blue">◷</span><p>ÚLTIMA ACTUALIZACIÓN</p><strong>{updatedAt.split(',')[1]?.trim() ?? '--:--'} <small>h</small></strong><span className="trend up">● Datos del portal</span></article></div><div className="caqi-guide"><div><p className="eyebrow">ESCALA OFICIAL</p><h2>Niveles CAQI</h2></div><div className="caqi-levels">{caqiLevels.map(([label, range, color]) => <div key={label}><span className="level-bar" style={{ background: color }} /><strong>{label}</strong><small>CAQI {range}</small></div>)}</div></div></section>
+    <section className="indicators"><div className="section-heading"><div><p className="eyebrow">RESUMEN DE LA RED</p><h2>Indicadores principales</h2></div><button className="outline-button">Ver histórico <span>↗</span></button></div><div className="indicator-grid"><article title="Número de estaciones que han aportado al menos una magnitud válida en la última respuesta del portal."><span className="indicator-icon teal">◌</span><p>ESTACIONES ACTIVAS</p><strong>{stationData.length} <small>/ {snapshot?.expectedStations ?? 24}</small></strong><span className="trend up">Cobertura del snapshot</span></article><article title="Media aritmética del ICA calculado en las estaciones con lecturas válidas."><span className="indicator-icon orange">≈</span><p>ÍNDICE MEDIO</p><strong>{averageIndex} <small>CAQI</small></strong><span className="trend">Media de la red actual</span></article><article title="Estaciones cuyo ICA actual está en los niveles Malo o Muy malo (CAQI superior a 75)."><span className="indicator-icon red">!</span><p>ICA ELEVADO</p><strong>{poorStations} <small>estaciones</small></strong><span className="trend warning">CAQI &gt; 75</span></article><article title="Fecha y hora responseDate devueltas por la API del Ayuntamiento de Madrid."><span className="indicator-icon blue">◷</span><p>ÚLTIMA ACTUALIZACIÓN</p><strong>{updatedAt.split(',')[1]?.trim() ?? '--:--'} <small>h</small></strong><span className="trend up">● Datos del portal</span></article></div></section>
+    <section className="coverage-section">
+      <div className="section-heading"><div><p className="eyebrow">COBERTURA DE LA RED</p><h2>Datos faltantes por estación</h2></div></div>
+      <div className="coverage-legend"><span><i style={{ background: coveragePalette.valid }} />Sin faltas</span><span><i style={{ background: coveragePalette.partial }} />Faltan algunas</span><span><i style={{ background: coveragePalette.missing }} />Sin datos</span></div>
+      <div className="coverage-panels">
+        <div className="coverage-card"><h3>Horas del día actual</h3><CoverageMatrix rows={hourlyCoverage} labels={Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'))} title="Horas" /></div>
+        <div className="coverage-card"><h3>Últimos 30 días</h3><CoverageMatrix rows={dailyCoverage} labels={dailyLabels} title="Días" /></div>
+      </div>
+    </section>
     <footer><span>AIRE MADRID · DATOS ABIERTOS</span><span>Fuente: Ayuntamiento de Madrid <b>↗</b></span></footer>
   </main>
 }
