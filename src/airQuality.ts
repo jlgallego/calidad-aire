@@ -116,6 +116,17 @@ function recordDate(payload: MadridResponse, records: MadridRecord[]): string {
   return `${record?.ANO ?? '0000'}-${record?.MES ?? '00'}-${record?.DIA ?? '00'}`
 }
 
+function isoDateFromParts(parts: { year: number; month: number; day: number }): string {
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
+}
+
+function shiftDate(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number)
+  const base = new Date(year, month - 1, day)
+  base.setDate(base.getDate() + days)
+  return isoDateFromParts({ year: base.getFullYear(), month: base.getMonth() + 1, day: base.getDate() })
+}
+
 function coverageStatus(expected: string[], valid: string[]): CoverageState {
   if (!expected.length) return 'missing'
   if (!valid.length) return 'missing'
@@ -128,10 +139,12 @@ function buildCoverageMatrix(payload: MadridResponse): { hourly: CoverageRow[]; 
   const currentDate = payload.responseDate ? payload.responseDate.slice(0, 10) : recordDate(payload, records)
   const historyDates = (payload.history ?? [])
     .map((entry) => entry.date)
-    .filter((date) => typeof date === 'string' && date.length >= 8)
+    .filter((date): date is string => typeof date === 'string' && date.length >= 8)
+
+  const dailyDates = Array.from(new Set([currentDate, ...historyDates]))
+    .sort((left, right) => left.localeCompare(right))
     .slice(-30)
 
-  const dailyDates = Array.from(new Set([currentDate, ...historyDates])).sort((left, right) => left.localeCompare(right)).slice(-30)
   const stationIds = Object.keys(STATIONS)
 
   const hourly = stationIds.map((stationId) => {
@@ -171,15 +184,23 @@ function chartFromHistory(payload: MadridResponse) {
   const history = payload.history ?? []
   if (!history.length) return payload.chart
 
-  const dates = history.map((entry) => entry.date).filter((date) => date.length >= 8).sort().slice(-3)
+  const currentDate = payload.responseDate?.slice(0, 10) ?? history.at(-1)?.date ?? ''
+  const requestedDates = [
+    shiftDate(currentDate, -2),
+    shiftDate(currentDate, -1),
+    currentDate,
+  ]
+
+  const historyByDate = new Map((payload.history ?? []).map((entry) => [entry.date, entry]))
+  const dates = requestedDates.filter((date) => historyByDate.has(date) || date === currentDate)
   const byStation = new Map<string, Map<string, { magnitude: string; values: (number | null)[] }>>()
-  const currentDate = payload.responseDate?.slice(0, 10)
 
   for (const date of dates) {
-    const entry = history.find((candidate) => candidate.date === date)
+    const entry = historyByDate.get(date)
     const maxHour = date === currentDate && payload.responseDate
-      ? Math.min(24, Math.max(0, Number(payload.responseDate.slice(11, 13)) || 0))
+      ? Math.min(24, Math.max(1, Number(payload.responseDate.slice(11, 13)) || 1))
       : 24
+
     for (const record of entry?.records ?? []) {
       const magnitude = String(record.MAGNITUD)
       const station = byStation.get(record.ESTACION) ?? new Map()
